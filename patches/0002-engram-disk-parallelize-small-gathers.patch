@@ -1,0 +1,38 @@
+From edfba063af325f4e20e44db0d5049d915040c0b5 Mon Sep 17 00:00:00 2001
+From: dsv41-engram-disk <noreply@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 06:57:00 +0000
+Subject: [PATCH 2/5] engram-disk: parallelize small gathers
+
+---
+ vllm/models/deepseek_v41/common/engram.py | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/vllm/models/deepseek_v41/common/engram.py b/vllm/models/deepseek_v41/common/engram.py
+index 4ae6b0d83..e2591a754 100644
+--- a/vllm/models/deepseek_v41/common/engram.py
++++ b/vllm/models/deepseek_v41/common/engram.py
+@@ -1209,7 +1209,7 @@ class ParallelEngramEmbedding(nn.Module):
+         self._disk_stage_s = torch.empty(
+             n_stage, scale_dim, dtype=torch.uint8
+         ).pin_memory()
+-        self._disk_threads = int(os.environ.get("VLLM_ENGRAM_DISK_THREADS", "16"))
++        self._disk_threads = int(os.environ.get("VLLM_ENGRAM_DISK_THREADS", "32"))
+         self._disk_pool = ThreadPoolExecutor(max_workers=self._disk_threads)
+         logger.info(
+             "Engram table served from disk: %d rows x %d (%s .weight at +%d), "
+@@ -1240,10 +1240,10 @@ class ParallelEngramEmbedding(nn.Module):
+             self._disk_stage_s = torch.empty(
+                 n, self.dim // self.block_size, dtype=torch.uint8
+             ).pin_memory()
+-        if n < 512:
++        if n < 8:
+             self._disk_gather(uniq_cpu, 0, n)
+         else:
+-            chunk = max(256, -(-n // (self._disk_threads * 2)))
++            chunk = max(4, -(-n // self._disk_threads))
+             futures = [
+                 self._disk_pool.submit(
+                     self._disk_gather, uniq_cpu[lo : lo + chunk], lo, min(n, lo + chunk)
+-- 
+2.43.0
+

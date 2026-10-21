@@ -1,0 +1,31 @@
+From 4c109c1d0fdc2f5de47dfe37356e93c4a918537c Mon Sep 17 00:00:00 2001
+From: dsv41-engram-disk <noreply@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 07:30:43 +0000
+Subject: [PATCH 4/5] DSV4.1 indexer: 64-row kernel blocks on SM120
+
+---
+ vllm/v1/attention/backends/mla/indexer.py | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/vllm/v1/attention/backends/mla/indexer.py b/vllm/v1/attention/backends/mla/indexer.py
+index 2d797ae66..8a141cfd9 100644
+--- a/vllm/v1/attention/backends/mla/indexer.py
++++ b/vllm/v1/attention/backends/mla/indexer.py
+@@ -369,7 +369,13 @@ class DeepseekV41IndexerBackend(DeepseekV4IndexerBackend):
+ 
+     @staticmethod
+     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
+-        return [64 if current_platform.is_device_capability_family(90) else 128]
++        # SM12x: DeepGEMM paged MQA logits only supports 32/64-row pages.
++        return [
++            64
++            if current_platform.is_device_capability_family(90)
++            or current_platform.is_device_capability_family(120)
++            else 128
++        ]
+ 
+ 
+ @dataclass(frozen=True)
+-- 
+2.43.0
+

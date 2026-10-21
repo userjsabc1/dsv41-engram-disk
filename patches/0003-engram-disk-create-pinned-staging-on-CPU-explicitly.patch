@@ -1,0 +1,54 @@
+From 9ae2a875fd03066e2baafad08013f72956271160 Mon Sep 17 00:00:00 2001
+From: dsv41-engram-disk <noreply@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 06:59:47 +0000
+Subject: [PATCH 3/5] engram-disk: create pinned staging on CPU explicitly
+
+---
+ vllm/models/deepseek_v41/common/engram.py | 21 +++++++++++++--------
+ 1 file changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/vllm/models/deepseek_v41/common/engram.py b/vllm/models/deepseek_v41/common/engram.py
+index e2591a754..6c1f29978 100644
+--- a/vllm/models/deepseek_v41/common/engram.py
++++ b/vllm/models/deepseek_v41/common/engram.py
+@@ -1203,12 +1203,13 @@ class ParallelEngramEmbedding(nn.Module):
+         self._disk_weight, self._disk_scale = views
+         max_tokens = get_current_vllm_config().scheduler_config.max_num_batched_tokens
+         n_stage = max(1, max_tokens * self.part_n_hash_cols)
++        # Model init may run inside a CUDA default-device context.
+         self._disk_stage_w = torch.empty(
+-            n_stage, self.row_bytes, dtype=torch.uint8
+-        ).pin_memory()
++            n_stage, self.row_bytes, dtype=torch.uint8, device="cpu", pin_memory=True
++        )
+         self._disk_stage_s = torch.empty(
+-            n_stage, scale_dim, dtype=torch.uint8
+-        ).pin_memory()
++            n_stage, scale_dim, dtype=torch.uint8, device="cpu", pin_memory=True
++        )
+         self._disk_threads = int(os.environ.get("VLLM_ENGRAM_DISK_THREADS", "32"))
+         self._disk_pool = ThreadPoolExecutor(max_workers=self._disk_threads)
+         logger.info(
+@@ -1235,11 +1236,15 @@ class ParallelEngramEmbedding(nn.Module):
+         if n > self._disk_stage_w.shape[0]:
+             # Larger than the scheduler budget (e.g. gathered DP batches).
+             self._disk_stage_w = torch.empty(
+-                n, self.row_bytes, dtype=torch.uint8
+-            ).pin_memory()
++                n, self.row_bytes, dtype=torch.uint8, device="cpu", pin_memory=True
++            )
+             self._disk_stage_s = torch.empty(
+-                n, self.dim // self.block_size, dtype=torch.uint8
+-            ).pin_memory()
++                n,
++                self.dim // self.block_size,
++                dtype=torch.uint8,
++                device="cpu",
++                pin_memory=True,
++            )
+         if n < 8:
+             self._disk_gather(uniq_cpu, 0, n)
+         else:
+-- 
+2.43.0
+
